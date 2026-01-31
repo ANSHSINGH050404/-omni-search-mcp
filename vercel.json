@@ -8,6 +8,10 @@
   ],
   "routes": [
     {
+      "src": "/api/(.*)",
+      "dest": "https://omni-search-mcp.onrender.com/api/$1"
+    },
+    {
       "src": "/(.*)",
       "dest": "frontend/$1"
     }
