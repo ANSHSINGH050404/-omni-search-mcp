@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: mcp-web-search-api
+    runtime: docker
+    plan: free
+    healthCheckPath: /
+    envVars:
+      - key: SERPER_API_KEY
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: PORT
+        value: 8000
+    buildCommand: docker build -t mcp-api .
+    startCommand: docker run -p 8000:8000 mcp-api
