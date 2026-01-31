@@ -4,6 +4,7 @@ import asyncio
 from dotenv import load_dotenv
 from fastmcp import FastMCP
 from utils import call_gemini, generate_summary, generate_answer, generate_graph_data
+from fastapi.middleware.cors import CORSMiddleware
 
 # ─────────────────────────────
 # 1. Configuration & Setup
@@ -19,6 +20,14 @@ if not SERPER_API_KEY:
 
 # Initialize the MCP Server
 mcp = FastMCP("WebSearchAgent")
+
+mcp.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 # Shared HTTP client configuration
 HTTP_TIMEOUT = 30.0
