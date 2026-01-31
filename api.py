@@ -13,6 +13,19 @@ from mcp_server import (
 )
 
 # Setup logging
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
+import logging
+import sys
+from mcp_server import (
+    _search_web_impl,
+    _read_page_impl,
+    _deep_research_impl,
+    _summarize_page_impl,
+    _generate_graph_impl
+)
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -20,16 +33,14 @@ print("LOADING API.PY - VERSION WITH GRAPH ENDPOINT", file=sys.stderr)
 
 app = FastAPI(title="Web Search Agent API")
 
-# Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # For development; restrict in production
+    allow_origins=["*"], 
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Request Models
 class SearchRequest(BaseModel):
     query: str
 
@@ -42,15 +53,12 @@ class ResearchRequest(BaseModel):
 class GraphRequest(BaseModel):
     topic: str
 
-# Middleware to log requests (helpful for debugging 404s)
 @app.middleware("http")
 async def log_requests(request: Request, call_next):
     logger.info(f"Request: {request.method} {request.url.path}")
     response = await call_next(request)
     logger.info(f"Response status: {response.status_code}")
     return response
-
-# Endpoints Implementation
 
 @app.post("/api/search")
 async def search(request: SearchRequest):

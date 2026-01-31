@@ -6,19 +6,14 @@ from fastmcp import FastMCP
 from utils import call_gemini, generate_summary, generate_answer, generate_graph_data
 from fastapi.middleware.cors import CORSMiddleware
 
-# ─────────────────────────────
-# 1. Configuration & Setup
-# ─────────────────────────────
 load_dotenv()
 
 SERPER_API_KEY = os.getenv("SERPER_API_KEY")
 SERPER_URL = "https://google.serper.dev/search"
 
-# Fail early if keys are missing
 if not SERPER_API_KEY:
     raise RuntimeError("SERPER_API_KEY not found in .env file.")
 
-# Initialize the MCP Server
 mcp = FastMCP("WebSearchAgent")
 
 mcp.add_middleware(
@@ -29,10 +24,8 @@ mcp.add_middleware(
     allow_headers=["*"],
 )
 
-# Shared HTTP client configuration
 HTTP_TIMEOUT = 30.0
 
-# Helper function to reuse reading logic
 async def _fetch_page_content(url: str, client: httpx.AsyncClient) -> str:
     jina_url = f"https://r.jina.ai/{url}"
     try:
@@ -43,11 +36,7 @@ async def _fetch_page_content(url: str, client: httpx.AsyncClient) -> str:
     except Exception:
         return "[Error: Failed to fetch]"
 
-# ─────────────────────────────
-# 2. Tool: Search Web
-# ─────────────────────────────
 
-# Internal implementation (reusable)
 async def _search_web_impl(query: str) -> str:
     headers = {
         "X-API-KEY": SERPER_API_KEY,
@@ -70,7 +59,7 @@ async def _search_web_impl(query: str) -> str:
             if "answerBox" in data:
                 snippet = data["answerBox"].get("snippet") or data["answerBox"].get("answer")
                 if snippet:
-                    results.append(f"💡 DIRECT ANSWER: {snippet}\n")
+                    results.append(f"💡 DIRECT ANSWER: {snippet}\\n")
 
             for item in data.get("organic", [])[:5]:
                 title = item.get("title", "No Title")
@@ -78,14 +67,14 @@ async def _search_web_impl(query: str) -> str:
                 snippet = item.get("snippet", "No description available.")
                 
                 entry = (
-                    f"Title: {title}\n"
-                    f"Link: {link}\n"
-                    f"Snippet: {snippet}\n"
+                    f"Title: {title}\\n"
+                    f"Link: {link}\\n"
+                    f"Snippet: {snippet}\\n"
                     "---"
                 )
                 results.append(entry)
 
-            return "\n".join(results) if results else "No search results found."
+            return "\\n".join(results) if results else "No search results found."
 
     except httpx.HTTPStatusError as e:
         return f"Error: Search API returned status {e.response.status_code}."
@@ -94,24 +83,16 @@ async def _search_web_impl(query: str) -> str:
 
 @mcp.tool()
 async def search_web(query: str) -> str:
-    """
-    Search the web using Google Search (via Serper).
-    Returns the top 5 results with titles, links, and snippets.
-    """
     return await _search_web_impl(query)
 
-# ─────────────────────────────
-# 3. Tool: Read Page (Bonus)
-# ─────────────────────────────
 
 async def _read_page_impl(url: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             content = await _fetch_page_content(url, client)
             
-            # Limit content length to prevent context overflow (approx 12000 chars)
             if len(content) > 12000:
-                content = content[:12000] + "\n... [Content Truncated]"
+                content = content[:12000] + "\\n... [Content Truncated]"
                 
             return content
 
@@ -120,104 +101,64 @@ async def _read_page_impl(url: str) -> str:
 
 @mcp.tool()
 async def read_page(url: str) -> str:
-    """
-    Visit a specific URL and return its content as clean Markdown.
-    Uses the Jina Reader API (free) to strip ads and boilerplate.
-    """
     return await _read_page_impl(url)
 
-# ─────────────────────────────
-# 4. Tool: Deep Research (Viral Feature)
-# ─────────────────────────────
 
 async def _deep_research_impl(topic: str) -> str:
-    # 1. Search
     search_results = await _search_web_impl(topic)
     
-    # Extract links (simple parsing from the text format we return in search_web)
     links = []
-    for line in search_results.split('\n'):
+    for line in search_results.split('\\n'):
         if line.startswith("Link: "):
             links.append(line.replace("Link: ", "").strip())
     
-    # Take top 3 links
     target_links = links[:3]
     if not target_links:
         return "No links found to research."
 
-    # 2. Fetch Content in Parallel
     async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
         tasks = [_fetch_page_content(link, client) for link in target_links]
         contents = await asyncio.gather(*tasks)
 
-    # Prepare context
     context = ""
     for i, (link, content) in enumerate(zip(target_links, contents)):
-        # Truncate each page to fit in context
         safe_content = content[:8000] + "..." if len(content) > 8000 else content
-        context += f"SOURCE {i+1} ({link}):\n{safe_content}\n\n{'='*20}\n\n"
+        context += f"SOURCE {i+1} ({link}):\\n{safe_content}\\n\\n{'='*20}\\n\\n"
 
-    # 3. AI Synthesis
     final_answer = await generate_answer(topic, context)
     return final_answer
 
 @mcp.tool()
 async def deep_research(topic: str) -> str:
-    """
-    Performs a deep research on a topic:
-    1. Searches Google for the top results.
-    2. Parallel fetches the content of the top 3 pages.
-    3. Uses Gemini AI to synthesize a comprehensive answer with citations.
-    """
     return await _deep_research_impl(topic)
 
-# ─────────────────────────────
-# 5. Tool: Summarize Page
-# ─────────────────────────────
 
 async def _summarize_page_impl(url: str) -> str:
     try:
         async with httpx.AsyncClient(timeout=HTTP_TIMEOUT) as client:
             content = await _fetch_page_content(url, client)
-            if content.startswith("[Error"):
+            if content.startswith("[Error"):\
                 return content
             
-            # Limit content
             if len(content) > 12000:
                 content = content[:12000]
             
             summary = await generate_summary(content)
-            return f"## Summary of {url}\n\n{summary}"
+            return f"## Summary of {url}\\n\\n{summary}"
     except Exception as e:
         return f"Error summarizing page: {str(e)}"
 
 @mcp.tool()
 async def summarize_page(url: str) -> str:
-    """
-    Reads a URL and uses AI to provide a concise summary.
-    """
     return await _summarize_page_impl(url)
 
-# ─────────────────────────────
-# 7. Tool: Generate Knowledge Graph
-# ─────────────────────────────
 
 async def _generate_graph_impl(topic: str) -> str:
-    # We can optionally search first to get better context, but for a "Mind Map" 
-    # pure knowledge retrieval from the LLM is often faster and cleaner.
-    # If we wanted to base it on current events, we'd search first.
-    # For now, let's rely on the LLM's internal knowledge for speed/virality.
     return await generate_graph_data(topic)
 
 @mcp.tool()
 async def generate_graph(topic: str) -> str:
-    """
-    Generates a Mermaid.js code for a knowledge graph/flowchart about the topic.
-    """
     return await _generate_graph_impl(topic)
 
-# ─────────────────────────────
-# 8. Main Entry Point
-# ─────────────────────────────
 if __name__ == "__main__":
     mcp.run()
